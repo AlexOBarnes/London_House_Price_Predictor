@@ -1,4 +1,6 @@
 '''Streamlit app that takes in housing values and returns an estimated price'''
+from os import environ as ENV
+from dotenv import load_dotenv
 from sklearn.ensemble import RandomForestRegressor
 import pandas as pd
 import pickle as pk
@@ -6,6 +8,7 @@ import streamlit as st
 import polars as pl
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
+from utils import get_lat_lon
 
 
 def load_session_state():
@@ -93,6 +96,27 @@ def confirmation():
     return st.button('Start Process', type='primary')
 
 
+def predict_price_range(floor_area, tenure, property_type, energy_rating, bathrooms, bedrooms, living_rooms, postcode):
+    """Processes property details using the cached preprocessor and predicts the price using cached models."""
+    models = load_models()
+    column_names = ['floorAreaSqM', 'tenure', 'propertyType', 'currentEnergyRating',
+                    'bathrooms', 'bedrooms', 'livingRooms', 'postcode']
+    input_values = [floor_area, tenure, property_type,
+                    energy_rating, bathrooms, bedrooms, living_rooms, postcode]
+    input_data = pd.DataFrame(input_values, columns=column_names)
+    if "processor" not in st.session_state:
+        st.session_state.processor = get_standard_processor()
+    transformed_data = st.session_state.processor.transform(input_data)
+    middle_pred = models[0].predict(transformed_data)[0]
+    lower_pred = models[1].predict(transformed_data)[0]
+    upper_pred = models[2].predict(transformed_data)[0]
+    return {
+        "lower_bound": lower_pred,
+        "middle_prediction": middle_pred,
+        "upper_bound": upper_pred
+    }
+
+
 @st.cache_resource
 def load_models() -> list[RandomForestRegressor]:
     '''Returns a list of random forest models'''
@@ -100,9 +124,6 @@ def load_models() -> list[RandomForestRegressor]:
     for file in ['model_cache/RandomForest.pkl', 'model_cache/lowerRandomForest.pkl', 'model_cache/upperRandomForest.pkl']:
         with open(file, 'rb') as f:
             models.append(pk.load(f))
-    st.session_state.middle_model = models[0]
-    st.session_state.lower_model = models[1]
-    st.session_state.upper_model = models[2]
     return models
 
 
@@ -121,34 +142,33 @@ def get_standard_processor():
 
 
 if __name__ == '__main__':
+    load_dotenv()
     st.set_page_config(layout="wide")
     load_session_state()
     title_bar()
     choice = input_control()
     if choice == 'URL':
         url_input_box()
+        if confirmation():
+            ...
     if choice == 'Properties':
         input_boxes()
-    if confirmation():
-        postcode = st.session_state.get('postcode', None)
-        bathrooms = st.session_state.get('bathrooms', None)
-        bedrooms = st.session_state.get('bedrooms', None)
-        livingrooms = st.session_state.get('livingrooms', None)
-        units = st.session_state.get('units', 'Square Metres')
-        area = st.session_state.get(
-            'area', 0.0) * (1-((st.session_state.get('units') == 'Square Feet') * 0.907097))
-        tenure = st.session_state.get('tenure', 'Leasehold')
-        property_type = st.session_state.get('property_type', None)
-        energy_rating = st.session_state.get('energy_rating', None)
-        st.write(f"Postcode: {postcode}")
-        st.write(f"Bathrooms: {bathrooms}")
-        st.write(f"Bedrooms: {bedrooms}")
-        st.write(f"Living Rooms: {livingrooms}")
-        st.write(f"Units: {units}")
-        st.write(f"Area: {area}")
-        st.write(f"Tenure: {tenure}")
-        st.write(f"Property Type: {property_type}")
-        st.write(f"Energy Rating: {energy_rating}")
+        if confirmation():
+            postcode = st.session_state.get('postcode', None)
+            latitude, longitude = get_lat_lon(postcode=postcode)
+            bathrooms = st.session_state.get('bathrooms', None)
+            bedrooms = st.session_state.get('bedrooms', None)
+            livingrooms = st.session_state.get('livingrooms', None)
+            units = st.session_state.get('units', 'Square Metres')
+            area = st.session_state.get(
+                'area', 0.0) * (1-((st.session_state.get('units') == 'Square Feet') * 0.907097))
+            tenure = st.session_state.get('tenure', 'Leasehold')
+            property_type = st.session_state.get('property_type', None)
+            energy_rating = st.session_state.get('energy_rating', None)
+            map_data = pd.DataFrame({'lat': [latitude], 'lon': [longitude]})
+            st.map(map_data, zoom=12, size=100)
+            st.write(predict_price_range(area, tenure, property_type,
+                                         energy_rating, bathrooms, bedrooms, livingrooms, postcode))
     # TODO: Map for location based off postcode
     # TODO: Inference with model
     # TODO: Input box for commute location, output for commute time
