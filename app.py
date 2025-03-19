@@ -6,6 +6,8 @@ import pandas as pd
 import pickle as pk
 import streamlit as st
 import polars as pl
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
 from utils import get_lat_lon
@@ -17,6 +19,9 @@ def load_session_state():
         'data/house_df.pkl')['postcode'].unique().tolist()
     st.session_state.model_list = load_models()
     st.session_state.processor = get_standard_processor()
+    st.session_state.sample_data = pd.read_pickle('data/house_df.pkl')[['tenure', 'propertyType', 'currentEnergyRating', 'bathrooms',
+                                                                        'bedrooms', 'livingRooms', 'floorAreaSqM', 'postcode']]
+    st.session_state.processor.fit(st.session_state.sample_data)
 
 
 def title_bar():
@@ -45,8 +50,8 @@ def input_boxes():
     '''Defines the orientation of the input boxes for entering house features'''
     col8, col1, col2, col3, col4, col5, col6, col7 = st.columns(8)
     with col8:
-        st.selectbox(
-            'Postcode:', options=st.session_state.postcode_options, key='postcode', index=None, placeholder="Select postcode...")
+        st.text_input(
+            'Postcode:', key='postcode', placeholder="Select postcode...")
     with col1:
         st.slider(
             'Bathrooms:', 0, 20, st.session_state.get('bathrooms', 1), key='bathrooms'
@@ -103,18 +108,52 @@ def predict_price_range(floor_area, tenure, property_type, energy_rating, bathro
                     'bathrooms', 'bedrooms', 'livingRooms', 'postcode']
     input_values = [floor_area, tenure, property_type,
                     energy_rating, bathrooms, bedrooms, living_rooms, postcode]
-    input_data = pd.DataFrame(input_values, columns=column_names)
-    if "processor" not in st.session_state:
-        st.session_state.processor = get_standard_processor()
-    transformed_data = st.session_state.processor.transform(input_data)
-    middle_pred = models[0].predict(transformed_data)[0]
-    lower_pred = models[1].predict(transformed_data)[0]
-    upper_pred = models[2].predict(transformed_data)[0]
+    input_data = pd.DataFrame([input_values], columns=column_names)
+    middle_pred = models[0].predict(input_data)
+    lower_pred = models[1].predict(input_data)
+    upper_pred = models[2].predict(input_data)
     return {
         "lower_bound": lower_pred,
         "middle_prediction": middle_pred,
         "upper_bound": upper_pred
     }
+
+
+def plot_prediction(predictions: dict, bedroom: str, property_type: str, postcode: str):
+    values = [
+        float(predictions["lower_bound"]) - 150000,
+        float(predictions["middle_prediction"]),
+        float(predictions["upper_bound"]) + 150000
+    ]
+    labels = ["Lower Bound", "Middle Prediction", "Upper Bound"]
+    bar_colours = ['#4CAF50', '#FFC107', '#F44336']
+
+    fig, ax = plt.subplots(figsize=(5, 2))
+
+    fig.patch.set_facecolor('#0f1117')
+    ax.set_facecolor('#0f1117')
+
+    ax.bar(labels, values, color=bar_colours, edgecolor='black', linewidth=1.2)
+
+    ax.set_ylabel('Cost (£)', fontsize=10, color='#FFFFFF')
+    ax.set_xlabel("Price Prediction Bounds", fontsize=10, color='#FFFFFF')
+    ax.set_title(f'Estimated price bounds of {bedroom} Bedroom {property_type} at {postcode}',
+                 fontsize=11, fontweight='bold', color='#FFFFFF')
+
+    ax.tick_params(axis='both', colors='#EEEEEE', labelsize=9)
+    ax.grid(axis='y', linestyle='--', alpha=0.5)
+
+    st.pyplot(fig)
+
+    st.write('Our model predicts that 80% of properties of this type and size fall within the following range:')
+    col1, col2, col3 = st.columns([5, 5, 3])
+    with col2:
+        st.markdown(f'## £{values[0]:.2f} -> £{values[2]:.2f}')
+
+    st.write('With a median value of :')
+    col1, col2, col3 = st.columns([3, 1, 3])
+    with col2:
+        st.markdown(f'## £{values[1]:.2f}')
 
 
 @st.cache_resource
@@ -167,8 +206,11 @@ if __name__ == '__main__':
             energy_rating = st.session_state.get('energy_rating', None)
             map_data = pd.DataFrame({'lat': [latitude], 'lon': [longitude]})
             st.map(map_data, zoom=12, size=100)
-            st.write(predict_price_range(area, tenure, property_type,
-                                         energy_rating, bathrooms, bedrooms, livingrooms, postcode))
+            predictions = predict_price_range(area, tenure, property_type,
+                                              energy_rating, bathrooms, bedrooms, livingrooms, postcode)
+            plot = st.container()
+            with plot:
+                plot_prediction(predictions, bedrooms, property_type, postcode)
     # TODO: Map for location based off postcode
     # TODO: Inference with model
     # TODO: Input box for commute location, output for commute time
