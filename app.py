@@ -22,6 +22,7 @@ def load_session_state():
     st.session_state.sample_data = pd.read_pickle('data/house_df.pkl')[['tenure', 'propertyType', 'currentEnergyRating', 'bathrooms',
                                                                         'bedrooms', 'livingRooms', 'floorAreaSqM', 'postcode']]
     st.session_state.processor.fit(st.session_state.sample_data)
+    st.write(st.session_state.postcode_options)
 
 
 def title_bar():
@@ -120,11 +121,18 @@ def predict_price_range(floor_area, tenure, property_type, energy_rating, bathro
 
 
 def plot_prediction(predictions: dict, bedroom: str, property_type: str, postcode: str):
-    values = [
-        float(predictions["lower_bound"]) - 150000,
-        float(predictions["middle_prediction"]) - 150000,
-        float(predictions["upper_bound"]) - 150000
-    ]
+    if postcode in st.session_state.postcode_options:
+        values = [
+            float(predictions["lower_bound"]),  # - 150000,
+            float(predictions["middle_prediction"]),  # - 150000,
+            float(predictions["upper_bound"])  # - 150000
+        ]
+    else:
+        values = [
+            float(predictions["lower_bound"]) - 150000,
+            float(predictions["middle_prediction"]) - 150000,
+            float(predictions["upper_bound"]) - 150000
+        ]
     labels = ["Lower Bound", "Middle Prediction", "Upper Bound"]
     bar_colours = ['#4CAF50', '#FFC107', '#F44336']
 
