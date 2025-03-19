@@ -122,8 +122,8 @@ def predict_price_range(floor_area, tenure, property_type, energy_rating, bathro
 def plot_prediction(predictions: dict, bedroom: str, property_type: str, postcode: str):
     values = [
         float(predictions["lower_bound"]) - 150000,
-        float(predictions["middle_prediction"]),
-        float(predictions["upper_bound"]) + 150000
+        float(predictions["middle_prediction"]) - 150000,
+        float(predictions["upper_bound"]) - 150000
     ]
     labels = ["Lower Bound", "Middle Prediction", "Upper Bound"]
     bar_colours = ['#4CAF50', '#FFC107', '#F44336']
@@ -145,15 +145,31 @@ def plot_prediction(predictions: dict, bedroom: str, property_type: str, postcod
 
     st.pyplot(fig)
 
-    st.write('Our model predicts that 80% of properties of this type and size fall within the following range:')
-    col1, col2, col3 = st.columns([5, 5, 3])
-    with col2:
-        st.markdown(f'## £{values[0]:.2f} -> £{values[2]:.2f}')
+    st.markdown(
+        "<h4 style='text-align: center; color: #8AB4F8;'>🏡 Our model predicts that 80% of properties of this type and size fall within the following range:</h4>",
+        unsafe_allow_html=True
+    )
 
-    st.write('With a median value of :')
-    col1, col2, col3 = st.columns([3, 1, 3])
+    col1, col2, col3 = st.columns([4, 6, 4])
     with col2:
-        st.markdown(f'## £{values[1]:.2f}')
+        st.markdown(
+            f"<h2 style='text-align: center; background-color: #1E1E1E; color: #4CAF50; padding: 12px; border-radius: 10px;'>"
+            f"💰 £{values[0]:,.2f} → £{values[2]:,.2f} 💰</h2>",
+            unsafe_allow_html=True
+        )
+
+    st.markdown(
+        "<h4 style='text-align: center; color: #FBC02D;'>📍 With a median value of:</h4>",
+        unsafe_allow_html=True
+    )
+
+    col1, col2, col3 = st.columns([3, 4, 3])
+    with col2:
+        st.markdown(
+            f"<h2 style='text-align: center; background-color: #292929; color: #FBC02D; padding: 12px; border-radius: 10px;'>"
+            f"🏷️ £{values[1]:,.2f}</h2>",
+            unsafe_allow_html=True
+        )
 
 
 @st.cache_resource
@@ -211,7 +227,5 @@ if __name__ == '__main__':
             plot = st.container()
             with plot:
                 plot_prediction(predictions, bedrooms, property_type, postcode)
-    # TODO: Map for location based off postcode
-    # TODO: Inference with model
     # TODO: Input box for commute location, output for commute time
     # TODO: Scrape of Rightmove for postcode, bathrooms, bedrooms, livingrooms, area, tenure, property_type, energy_rating. Give option to fill in missing values (DataEditor)
