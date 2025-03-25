@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
-from utils import get_lat_lon
+from utils import get_lat_lon, display_commute_times
 
 
 def load_session_state():
@@ -22,7 +22,6 @@ def load_session_state():
     st.session_state.sample_data = pd.read_pickle('data/house_df.pkl')[['tenure', 'propertyType', 'currentEnergyRating', 'bathrooms',
                                                                         'bedrooms', 'livingRooms', 'floorAreaSqM', 'postcode']]
     st.session_state.processor.fit(st.session_state.sample_data)
-    st.write(st.session_state.postcode_options)
 
 
 def title_bar():
@@ -45,6 +44,13 @@ def url_input_box():
     '''Defines the orientation of the input boxes and following process of scraping/storing data'''
     st.warning('Section is in Production...')
     st.text_input('Rightmove Property URL:', placeholder='URL')
+
+
+def target_location_input_box():
+    if 'targets' not in st.session_state:
+        st.session_state.targets = []
+    return st.text_input(
+        'Enter an address or list of addresses separated by ";" that you want to measure this properties commute to:', placeholder='Address')
 
 
 def input_boxes():
@@ -123,9 +129,9 @@ def predict_price_range(floor_area, tenure, property_type, energy_rating, bathro
 def plot_prediction(predictions: dict, bedroom: str, property_type: str, postcode: str):
     if postcode in st.session_state.postcode_options:
         values = [
-            float(predictions["lower_bound"]),  # - 150000,
-            float(predictions["middle_prediction"]),  # - 150000,
-            float(predictions["upper_bound"])  # - 150000
+            float(predictions["lower_bound"]),
+            float(predictions["middle_prediction"]),
+            float(predictions["upper_bound"])
         ]
     else:
         values = [
@@ -180,6 +186,26 @@ def plot_prediction(predictions: dict, bedroom: str, property_type: str, postcod
         )
 
 
+def map_targets(home_lat, home_long):
+    target_dict = {'lat': [home_lat], 'lon': [home_long], 'size': [200]}
+    for target in st.session_state.targets:
+        lat, lon = get_lat_lon(target)
+        target_dict['lat'] += [lat]  # Add the new lat to the list
+        target_dict['lon'] += [lon]  # Add the new lon to the list
+        target_dict['size'] += [100]
+
+    targets = pd.DataFrame(target_dict)
+    st.session_state.target_df = targets
+    st.map(targets, size='size', zoom=12)
+
+
+def calculate_commutes(lat, long):
+    if st.session_state.targets:
+        map_targets(lat, long)
+        display_commute_times(lat, long)
+        ...
+
+
 @st.cache_resource
 def load_models() -> list[RandomForestRegressor]:
     '''Returns a list of random forest models'''
@@ -216,9 +242,10 @@ if __name__ == '__main__':
             ...
     if choice == 'Properties':
         input_boxes()
+        target = target_location_input_box()
         if confirmation():
             postcode = st.session_state.get('postcode', None)
-            latitude, longitude = get_lat_lon(postcode=postcode)
+            latitude, longitude = get_lat_lon(postcode)
             bathrooms = st.session_state.get('bathrooms', None)
             bedrooms = st.session_state.get('bedrooms', None)
             livingrooms = st.session_state.get('livingrooms', None)
@@ -228,6 +255,10 @@ if __name__ == '__main__':
             tenure = st.session_state.get('tenure', 'Leasehold')
             property_type = st.session_state.get('property_type', None)
             energy_rating = st.session_state.get('energy_rating', None)
+            if target:
+                st.session_state.targets = target.split(';')
+            else:
+                st.session_state.targets = [ENV['DEFAULT_LOCATION']]
             map_data = pd.DataFrame({'lat': [latitude], 'lon': [longitude]})
             st.map(map_data, zoom=12, size=100)
             predictions = predict_price_range(area, tenure, property_type,
@@ -235,5 +266,6 @@ if __name__ == '__main__':
             plot = st.container()
             with plot:
                 plot_prediction(predictions, bedrooms, property_type, postcode)
+            calculate_commutes(latitude, longitude)
     # TODO: Input box for commute location, output for commute time
     # TODO: Scrape of Rightmove for postcode, bathrooms, bedrooms, livingrooms, area, tenure, property_type, energy_rating. Give option to fill in missing values (DataEditor)
